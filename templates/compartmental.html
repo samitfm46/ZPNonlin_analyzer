@@ -1,0 +1,547 @@
+{% extends 'base.html' %}
+
+{% block title %}Compartmental Analysis - PK Analysis Platform{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-chart-line"></i> Compartmental Modeling</h1>
+        <p class="lead">Fit pharmacokinetic compartmental models to concentration-time data</p>
+        <hr>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Compartmental Analysis Form -->
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-cogs"></i> Model Configuration</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('compartmental') }}" method="post" class="needs-validation" novalidate>
+                    <div class="mb-3">
+                        <label for="dataset_id" class="form-label">Select Dataset</label>
+                        <select class="form-select" id="dataset_id" name="dataset_id" required>
+                            <option value="" selected disabled>Choose a dataset...</option>
+                            {% for dataset in datasets %}
+                            <option value="{{ dataset.id }}">{{ dataset.name }} ({{ dataset.study.name }})</option>
+                            {% endfor %}
+                        </select>
+                        <div class="invalid-feedback">Please select a dataset.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="analysis_name" class="form-label">Analysis Name</label>
+                        <input type="text" class="form-control" id="analysis_name" name="analysis_name" 
+                               placeholder="e.g., Study001 1-Comp Model" required>
+                        <div class="invalid-feedback">Please provide an analysis name.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="model_type" class="form-label">Model Type</label>
+                        <select class="form-select" id="model_type" name="model_type" required>
+                            <option value="" selected disabled>Select model type...</option>
+                            <option value="one_compartment">One-Compartment</option>
+                            <option value="two_compartment">Two-Compartment</option>
+                        </select>
+                        <div class="invalid-feedback">Please select a model type.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="absorption" class="form-label">Absorption Type</label>
+                        <select class="form-select" id="absorption" name="absorption" required>
+                            <option value="" selected disabled>Select absorption type...</option>
+                            <!-- Options will be populated via JavaScript based on model selection -->
+                        </select>
+                        <div class="invalid-feedback">Please select an absorption type.</div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="dose" class="form-label">Dose</label>
+                                <input type="number" class="form-control" id="dose" name="dose" 
+                                       min="0" step="0.01" placeholder="e.g., 100" required>
+                                <div class="invalid-feedback">Please enter a dose value.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="dose_unit" class="form-label">Dose Unit</label>
+                                <select class="form-select" id="dose_unit" name="dose_unit">
+                                    <option value="mg" selected>mg</option>
+                                    <option value="μg">μg</option>
+                                    <option value="ng">ng</option>
+                                    <option value="mg/kg">mg/kg</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="conc_unit" class="form-label">Concentration Unit</label>
+                                <select class="form-select" id="conc_unit" name="conc_unit">
+                                    <option value="ng/mL" selected>ng/mL</option>
+                                    <option value="μg/mL">μg/mL</option>
+                                    <option value="mg/mL">mg/mL</option>
+                                    <option value="μM">μM</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="time_unit" class="form-label">Time Unit</label>
+                                <select class="form-select" id="time_unit" name="time_unit">
+                                    <option value="h" selected>hours</option>
+                                    <option value="min">minutes</option>
+                                    <option value="day">days</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-calculator me-2"></i> Fit Model
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Compartmental Results (if available) -->
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-line"></i> Model Results</h5>
+            </div>
+            <div class="card-body">
+                {% if analysis %}
+                    <input type="hidden" id="analysisId" value="{{ analysis.id }}">
+                    <div class="alert alert-success">
+                        <h6>Analysis: {{ analysis.name }}</h6>
+                        <p>Model fitting completed successfully</p>
+                    </div>
+                    
+                    {% set parameters = analysis.parameters|tojson|fromjson %}
+                    <div class="mb-3">
+                        <div class="card bg-dark-subtle">
+                            <div class="card-body">
+                                <h6 class="card-title">Model Information</h6>
+                                <p class="mb-1"><strong>Model Type:</strong> {{ parameters.model_type }}-compartment</p>
+                                <p class="mb-1"><strong>Absorption:</strong> {{ parameters.absorption }}</p>
+                                <p class="mb-0"><strong>Dose:</strong> {{ parameters.dose }} {{ parameters.dose_unit }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <ul class="nav nav-tabs" id="modelResultTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="fit-tab" data-bs-toggle="tab" data-bs-target="#fit" 
+                                    type="button" role="tab" aria-controls="fit" aria-selected="true">Model Fit</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="parameters-tab" data-bs-toggle="tab" data-bs-target="#parameters" 
+                                    type="button" role="tab" aria-controls="parameters" aria-selected="false">Parameters</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="diagnostics-tab" data-bs-toggle="tab" data-bs-target="#diagnostics" 
+                                    type="button" role="tab" aria-controls="diagnostics" aria-selected="false">Diagnostics</button>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content pt-3" id="modelResultTabContent">
+                        <!-- Model Fit Tab -->
+                        <div class="tab-pane fade show active" id="fit" role="tabpanel" aria-labelledby="fit-tab">
+                            <div class="row mb-3">
+                                <div class="col-12">
+                                    <div class="card bg-dark">
+                                        <div class="card-body">
+                                            <h6 class="card-title">Model Fit Plot</h6>
+                                            <div id="modelFitPlot" class="plot-container"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Subject Selector for Multiple Subjects -->
+                            {% set results = analysis.results|tojson|fromjson %}
+                            {% set subjects = [subject_id for subject_id in results if subject_id != 'summary'] %}
+                            
+                            {% if subjects|length > 1 %}
+                                <div class="mb-3">
+                                    <label for="subjectSelector" class="form-label">Select Subject</label>
+                                    <select class="form-select" id="subjectSelector">
+                                        {% for subject_id in subjects %}
+                                            <option value="{{ subject_id }}">Subject {{ subject_id }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Parameters Tab -->
+                        <div class="tab-pane fade" id="parameters" role="tabpanel" aria-labelledby="parameters-tab">
+                            {% set results = analysis.results|tojson|fromjson %}
+                            
+                            <!-- Summary parameters if available -->
+                            {% if results.summary and results.summary.derived_parameters %}
+                                <h6>Summary of Derived Parameters</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Parameter</th>
+                                                <th>Mean</th>
+                                                <th>SD</th>
+                                                <th>CV%</th>
+                                                <th>Min</th>
+                                                <th>Max</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for key, value in results.summary.derived_parameters.items() %}
+                                                {% if key.endswith('_mean') %}
+                                                    {% set param = key.replace('_mean', '') %}
+                                                    <tr>
+                                                        <td>{{ param }}</td>
+                                                        <td>{{ "%.4g"|format(value) }}</td>
+                                                        <td>{{ "%.4g"|format(results.summary.derived_parameters[param + '_sd']) if param + '_sd' in results.summary.derived_parameters else 'N/A' }}</td>
+                                                        <td>{{ "%.2f"|format(results.summary.derived_parameters[param + '_cv']) if param + '_cv' in results.summary.derived_parameters else 'N/A' }}</td>
+                                                        <td>{{ "%.4g"|format(results.summary.derived_parameters[param + '_min']) if param + '_min' in results.summary.derived_parameters else 'N/A' }}</td>
+                                                        <td>{{ "%.4g"|format(results.summary.derived_parameters[param + '_max']) if param + '_max' in results.summary.derived_parameters else 'N/A' }}</td>
+                                                    </tr>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% endif %}
+                            
+                            <!-- Individual parameters -->
+                            {% set subjects = [subject_id for subject_id in results if subject_id != 'summary'] %}
+                            
+                            {% if subjects %}
+                                <h6 class="mt-3">Individual Subject Parameters</h6>
+                                
+                                {% for subject_id in subjects %}
+                                    <div class="card mb-3 bg-dark-subtle">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">Subject {{ subject_id }}</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            {% if 'derived_parameters' in results[subject_id] %}
+                                                <h6>Derived Parameters</h6>
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Parameter</th>
+                                                                <th>Value</th>
+                                                                <th>Description</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {% for key, value in results[subject_id].derived_parameters.items() %}
+                                                                <tr>
+                                                                    <td>{{ key }}</td>
+                                                                    <td>{{ "%.4g"|format(value) if value is not none else 'N/A' }}</td>
+                                                                    <td>{{ get_parameter_description(key) }}</td>
+                                                                </tr>
+                                                            {% endfor %}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            {% else %}
+                                                <div class="alert alert-info">No derived parameters available for this subject.</div>
+                                            {% endif %}
+                                            
+                                            {% if 'fitted_parameters' in results[subject_id] %}
+                                                <h6 class="mt-3">Fitted Model Parameters</h6>
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Parameter</th>
+                                                                <th>Value</th>
+                                                                <th>Standard Error</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {% for i in range(results[subject_id].fitted_parameters|length) %}
+                                                                <tr>
+                                                                    <td>p{{ i+1 }}</td>
+                                                                    <td>{{ "%.4g"|format(results[subject_id].fitted_parameters[i]) }}</td>
+                                                                    <td>{{ "%.4g"|format(results[subject_id].parameter_errors[i]) }}</td>
+                                                                </tr>
+                                                            {% endfor %}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                                
+                                <div class="mt-3">
+                                    <a href="{{ url_for('reports') }}?analysis_id={{ analysis.id }}" class="btn btn-secondary">
+                                        <i class="fas fa-file-pdf me-2"></i> Generate Report
+                                    </a>
+                                </div>
+                            {% else %}
+                                <div class="alert alert-info">No subject data available.</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Diagnostics Tab -->
+                        <div class="tab-pane fade" id="diagnostics" role="tabpanel" aria-labelledby="diagnostics-tab">
+                            {% set results = analysis.results|tojson|fromjson %}
+                            {% set subjects = [subject_id for subject_id in results if subject_id != 'summary'] %}
+                            
+                            {% if subjects %}
+                                <div class="mb-3">
+                                    {% if subjects|length > 1 %}
+                                        <label for="diagnosticSubjectSelector" class="form-label">Select Subject</label>
+                                        <select class="form-select" id="diagnosticSubjectSelector">
+                                            {% for subject_id in subjects %}
+                                                <option value="{{ subject_id }}">Subject {{ subject_id }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    {% endif %}
+                                </div>
+                                
+                                {% for subject_id in subjects %}
+                                    <div class="subject-diagnostics" id="diagnostics-{{ subject_id }}" style="{% if not loop.first %}display: none;{% endif %}">
+                                        {% if 'goodness_of_fit' in results[subject_id] %}
+                                            <h6>Goodness of Fit Metrics</h6>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Metric</th>
+                                                            <th>Value</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for key, value in results[subject_id].goodness_of_fit.items() %}
+                                                            {% if key != 'residuals' %}
+                                                                <tr>
+                                                                    <td>{{ key }}</td>
+                                                                    <td>{{ "%.4g"|format(value) if value is not none else 'N/A' }}</td>
+                                                                </tr>
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            
+                                            <div class="card bg-dark mt-3">
+                                                <div class="card-body">
+                                                    <h6 class="card-title">Residuals Plot</h6>
+                                                    <div id="residualsPlot-{{ subject_id }}" class="plot-container"></div>
+                                                </div>
+                                            </div>
+                                        {% else %}
+                                            <div class="alert alert-info">No diagnostic data available for this subject.</div>
+                                        {% endif %}
+                                    </div>
+                                {% endfor %}
+                            {% else %}
+                                <div class="alert alert-info">No diagnostic data available.</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-chart-line fa-4x mb-3 text-muted"></i>
+                        <h5>No Model Results</h5>
+                        <p class="text-muted">Configure and fit a model to see results here.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dataset Preview Modal -->
+<div class="modal fade" id="datasetPreviewModal" tabindex="-1" aria-labelledby="datasetPreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="datasetPreviewModalLabel">Dataset Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="datasetPreviewContent" class="table-responsive"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Setup model type and absorption type interactions
+        const modelTypeSelect = document.getElementById('model_type');
+        const absorptionTypeSelect = document.getElementById('absorption');
+        
+        if (modelTypeSelect && absorptionTypeSelect) {
+            modelTypeSelect.addEventListener('change', function() {
+                updateAbsorptionOptions(this.value);
+            });
+        }
+        
+        // For compartmental model visualization
+        if (document.getElementById('analysisId')) {
+            const analysisId = document.getElementById('analysisId').value;
+            
+            // Fetch analysis data for plotting
+            fetch(`/api/analysis/${analysisId}/plot-data`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        renderCompartmentalPlots(data.data);
+                        
+                        // Setup subject selector for multiple subjects
+                        const subjectSelector = document.getElementById('subjectSelector');
+                        if (subjectSelector) {
+                            subjectSelector.addEventListener('change', function() {
+                                updateModelPlot(data.data, this.value);
+                            });
+                        }
+                        
+                        // Setup diagnostics subject selector
+                        const diagnosticSubjectSelector = document.getElementById('diagnosticSubjectSelector');
+                        if (diagnosticSubjectSelector) {
+                            diagnosticSubjectSelector.addEventListener('change', function() {
+                                // Hide all subject diagnostics divs
+                                document.querySelectorAll('.subject-diagnostics').forEach(div => {
+                                    div.style.display = 'none';
+                                });
+                                
+                                // Show the selected subject's diagnostics
+                                const selectedDiagnostics = document.getElementById(`diagnostics-${this.value}`);
+                                if (selectedDiagnostics) {
+                                    selectedDiagnostics.style.display = 'block';
+                                }
+                                
+                                // Update the residuals plot
+                                renderResidualPlot(data.data[this.value], this.value);
+                            });
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading compartmental model data:', error);
+                });
+        }
+        
+        // Preview dataset when selected
+        const datasetSelect = document.getElementById('dataset_id');
+        if (datasetSelect) {
+            datasetSelect.addEventListener('change', function() {
+                const datasetId = this.value;
+                if (datasetId) {
+                    fetch(`/api/dataset/${datasetId}/preview`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                // Show preview button and register click event
+                                const selectDiv = this.closest('div');
+                                
+                                // Remove existing preview button if any
+                                const existingBtn = selectDiv.querySelector('.preview-btn');
+                                if (existingBtn) {
+                                    existingBtn.remove();
+                                }
+                                
+                                // Add new preview button
+                                const previewBtn = document.createElement('button');
+                                previewBtn.className = 'btn btn-sm btn-info mt-2 preview-btn';
+                                previewBtn.innerHTML = '<i class="fas fa-table me-1"></i> Preview Data';
+                                previewBtn.type = 'button';
+                                previewBtn.setAttribute('data-dataset-id', datasetId);
+                                
+                                previewBtn.addEventListener('click', function() {
+                                    const id = this.getAttribute('data-dataset-id');
+                                    showDatasetPreview(id);
+                                });
+                                
+                                selectDiv.appendChild(previewBtn);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error loading dataset preview:', error);
+                        });
+                }
+            });
+        }
+    });
+    
+    function updateAbsorptionOptions(modelType) {
+        const absorptionSelect = document.getElementById('absorption');
+        if (!absorptionSelect) return;
+        
+        // Clear current options
+        absorptionSelect.innerHTML = '';
+        
+        // Add appropriate options based on model type
+        if (modelType === 'one_compartment') {
+            addOption(absorptionSelect, 'iv_bolus', 'IV Bolus');
+            addOption(absorptionSelect, 'first-order', 'First-Order Absorption');
+            addOption(absorptionSelect, 'zero-order', 'Zero-Order Absorption');
+        } else if (modelType === 'two_compartment') {
+            addOption(absorptionSelect, 'iv_bolus', 'IV Bolus');
+            addOption(absorptionSelect, 'first-order', 'First-Order Absorption');
+        }
+        
+        // Select first option
+        if (absorptionSelect.options.length > 0) {
+            absorptionSelect.selectedIndex = 0;
+        }
+    }
+
+    function addOption(selectElement, value, text) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = text;
+        selectElement.appendChild(option);
+    }
+    
+    function showDatasetPreview(datasetId) {
+        fetch(`/api/dataset/${datasetId}/preview`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Create preview table
+                    let tableHTML = '<table class="table table-sm table-striped">';
+                    tableHTML += '<thead><tr><th>Subject ID</th><th>Time</th><th>Concentration</th></tr></thead>';
+                    tableHTML += '<tbody>';
+                    
+                    data.data.forEach(sample => {
+                        tableHTML += `<tr><td>${sample.subject_id}</td><td>${sample.time}</td><td>${sample.concentration}</td></tr>`;
+                    });
+                    
+                    tableHTML += '</tbody></table>';
+                    
+                    document.getElementById('datasetPreviewContent').innerHTML = tableHTML;
+                    
+                    // Show modal
+                    const previewModal = new bootstrap.Modal(document.getElementById('datasetPreviewModal'));
+                    previewModal.show();
+                }
+            })
+            .catch(error => {
+                console.error('Error showing dataset preview:', error);
+            });
+    }
+</script>
+{% endblock %}

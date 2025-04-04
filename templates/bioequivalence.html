@@ -1,0 +1,351 @@
+{% extends 'base.html' %}
+
+{% block title %}Bioequivalence Analysis - PK Analysis Platform{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-pills"></i> Bioequivalence Analysis</h1>
+        <p class="lead">Compare test and reference formulations for bioequivalence assessment</p>
+        <hr>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Bioequivalence Analysis Form -->
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-cogs"></i> Analysis Configuration</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('bioequivalence') }}" method="post" class="needs-validation" novalidate>
+                    <div class="mb-3">
+                        <label for="test_dataset_id" class="form-label">Test Formulation Dataset</label>
+                        <select class="form-select" id="test_dataset_id" name="test_dataset_id" required>
+                            <option value="" selected disabled>Choose test dataset...</option>
+                            {% for dataset in datasets %}
+                            <option value="{{ dataset.id }}">{{ dataset.name }} ({{ dataset.study.name }})</option>
+                            {% endfor %}
+                        </select>
+                        <div class="invalid-feedback">Please select a test dataset.</div>
+                        <small class="form-text text-muted">
+                            Note: NCA analysis must be performed on this dataset first.
+                        </small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="reference_dataset_id" class="form-label">Reference Formulation Dataset</label>
+                        <select class="form-select" id="reference_dataset_id" name="reference_dataset_id" required>
+                            <option value="" selected disabled>Choose reference dataset...</option>
+                            {% for dataset in datasets %}
+                            <option value="{{ dataset.id }}">{{ dataset.name }} ({{ dataset.study.name }})</option>
+                            {% endfor %}
+                        </select>
+                        <div class="invalid-feedback">Please select a reference dataset.</div>
+                        <small class="form-text text-muted">
+                            Note: NCA analysis must be performed on this dataset first.
+                        </small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="analysis_name" class="form-label">Analysis Name</label>
+                        <input type="text" class="form-control" id="analysis_name" name="analysis_name" 
+                               placeholder="e.g., Formulation A vs B BE Analysis" required>
+                        <div class="invalid-feedback">Please provide an analysis name.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="design" class="form-label">Study Design</label>
+                        <select class="form-select" id="design" name="design">
+                            <option value="crossover" selected>Crossover</option>
+                            <option value="parallel">Parallel</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="log_transform" name="log_transform" checked>
+                        <label class="form-check-label" for="log_transform">
+                            Log-transform data for analysis
+                        </label>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-calculator me-2"></i> Calculate Bioequivalence
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bioequivalence Results (if available) -->
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-bar"></i> Results</h5>
+            </div>
+            <div class="card-body">
+                {% if analysis %}
+                    <input type="hidden" id="analysisId" value="{{ analysis.id }}">
+                    <div class="alert alert-success">
+                        <h6>Analysis: {{ analysis.name }}</h6>
+                        <p>Bioequivalence analysis completed successfully</p>
+                    </div>
+                    
+                    {% set parameters = analysis.parameters|tojson|fromjson %}
+                    <div class="mb-3">
+                        <div class="card bg-dark-subtle">
+                            <div class="card-body">
+                                <h6 class="card-title">Analysis Information</h6>
+                                <p class="mb-1"><strong>Study Design:</strong> {{ parameters.design|capitalize }}</p>
+                                <p class="mb-1"><strong>Test Dataset:</strong> {{ test_dataset.name if test_dataset else 'N/A' }}</p>
+                                <p class="mb-0"><strong>Reference Dataset:</strong> {{ reference_dataset.name if reference_dataset else 'N/A' }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <ul class="nav nav-tabs" id="beResultTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="summary-tab" data-bs-toggle="tab" data-bs-target="#summary" 
+                                    type="button" role="tab" aria-controls="summary" aria-selected="true">Summary</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="detailed-tab" data-bs-toggle="tab" data-bs-target="#detailed" 
+                                    type="button" role="tab" aria-controls="detailed" aria-selected="false">Detailed Results</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="plots-tab" data-bs-toggle="tab" data-bs-target="#plots" 
+                                    type="button" role="tab" aria-controls="plots" aria-selected="false">Plots</button>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content pt-3" id="beResultTabContent">
+                        <!-- Summary Tab -->
+                        <div class="tab-pane fade show active" id="summary" role="tabpanel" aria-labelledby="summary-tab">
+                            {% set results = analysis.results|tojson|fromjson %}
+                            
+                            <!-- Bioequivalence Summary Table -->
+                            <h6>Bioequivalence Assessment</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Parameter</th>
+                                            <th>Test (Geom. Mean)</th>
+                                            <th>Reference (Geom. Mean)</th>
+                                            <th>Ratio (%)</th>
+                                            <th>90% CI</th>
+                                            <th>Bioequivalent</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for param, param_data in results.items() %}
+                                            {% if param != 'summary' and 'error' not in param_data %}
+                                                <tr class="{{ 'highlight-row' if param_data.is_bioequivalent else '' }}">
+                                                    <td>{{ param|upper }}</td>
+                                                    <td>{{ "%.4g"|format(param_data.test_geomean) }}</td>
+                                                    <td>{{ "%.4g"|format(param_data.ref_geomean) }}</td>
+                                                    <td>{{ "%.2f"|format(param_data.ratio) }}</td>
+                                                    <td>{{ "%.2f"|format(param_data.ci_lower) }} - {{ "%.2f"|format(param_data.ci_upper) }}</td>
+                                                    <td>
+                                                        {% if param_data.is_bioequivalent %}
+                                                            <span class="text-success"><i class="fas fa-check-circle"></i> Yes</span>
+                                                        {% else %}
+                                                            <span class="text-danger"><i class="fas fa-times-circle"></i> No</span>
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <!-- BE Criteria -->
+                            <div class="alert alert-info mt-3">
+                                <h6 class="mb-2">Bioequivalence Criteria</h6>
+                                <p class="mb-1">The 90% confidence interval of the test/reference ratio must be within 80-125% for bioequivalence.</p>
+                                <p class="mb-0">Study design: {{ parameters.design|capitalize }}</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Detailed Results Tab -->
+                        <div class="tab-pane fade" id="detailed" role="tabpanel" aria-labelledby="detailed-tab">
+                            {% set results = analysis.results|tojson|fromjson %}
+                            
+                            <!-- Parameters with detailed statistics -->
+                            {% for param, param_data in results.items() %}
+                                {% if param != 'summary' and 'error' not in param_data %}
+                                    <div class="card mb-3 bg-dark-subtle">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">{{ param|upper }}</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <h6>Test Formulation</h6>
+                                                    <p class="mb-1"><strong>Geometric Mean:</strong> {{ "%.4g"|format(param_data.test_geomean) }}</p>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <h6>Reference Formulation</h6>
+                                                    <p class="mb-1"><strong>Geometric Mean:</strong> {{ "%.4g"|format(param_data.ref_geomean) }}</p>
+                                                </div>
+                                            </div>
+                                            
+                                            <hr>
+                                            
+                                            <h6>Statistical Analysis</h6>
+                                            <p class="mb-1"><strong>Ratio (Test/Reference):</strong> {{ "%.2f"|format(param_data.ratio) }}%</p>
+                                            <p class="mb-1"><strong>90% Confidence Interval:</strong> {{ "%.2f"|format(param_data.ci_lower) }} - {{ "%.2f"|format(param_data.ci_upper) }}%</p>
+                                            
+                                            {% if parameters.design == 'crossover' and 'intra_subject_cv' in param_data %}
+                                                <p class="mb-1"><strong>Intra-subject CV%:</strong> {{ "%.2f"|format(param_data.intra_subject_cv) }}%</p>
+                                            {% elif parameters.design == 'parallel' and 'inter_subject_cv' in param_data %}
+                                                <p class="mb-1"><strong>Inter-subject CV%:</strong> {{ "%.2f"|format(param_data.inter_subject_cv) }}%</p>
+                                            {% endif %}
+                                            
+                                            <div class="alert {{ 'alert-success' if param_data.is_bioequivalent else 'alert-danger' }} mt-2">
+                                                <strong>Conclusion:</strong>
+                                                {% if param_data.is_bioequivalent %}
+                                                    Bioequivalent (90% CI within 80-125%)
+                                                {% else %}
+                                                    Not Bioequivalent (90% CI outside 80-125%)
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            <div class="mt-3">
+                                <a href="{{ url_for('reports') }}?analysis_id={{ analysis.id }}" class="btn btn-secondary">
+                                    <i class="fas fa-file-pdf me-2"></i> Generate Report
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <!-- Plots Tab -->
+                        <div class="tab-pane fade" id="plots" role="tabpanel" aria-labelledby="plots-tab">
+                            <div class="row mb-3">
+                                <div class="col-12">
+                                    <div class="card bg-dark">
+                                        <div class="card-body">
+                                            <h6 class="card-title">Bioequivalence Ratio Plot</h6>
+                                            <div id="bioequivalencePlot" class="plot-container"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-12">
+                                    <div class="card bg-dark">
+                                        <div class="card-body">
+                                            <h6 class="card-title">Test vs. Reference Concentration Profiles</h6>
+                                            <div id="profilesPlot" class="plot-container"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-pills fa-4x mb-3 text-muted"></i>
+                        <h5>No Analysis Results</h5>
+                        <p class="text-muted">Configure and run an analysis to see results here.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Setup dataset selection interaction
+        const testDatasetSelect = document.getElementById('test_dataset_id');
+        const referenceDatasetSelect = document.getElementById('reference_dataset_id');
+        
+        if (testDatasetSelect && referenceDatasetSelect) {
+            // Prevent selecting the same dataset for both test and reference
+            testDatasetSelect.addEventListener('change', function() {
+                updateReferenceOptions(this.value);
+            });
+            
+            referenceDatasetSelect.addEventListener('change', function() {
+                updateTestOptions(this.value);
+            });
+        }
+        
+        // For bioequivalence visualization
+        if (document.getElementById('analysisId')) {
+            const analysisId = document.getElementById('analysisId').value;
+            
+            // Fetch analysis data for plotting
+            fetch(`/api/analysis/${analysisId}/plot-data`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        renderBioequivalencePlots(data.data);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading bioequivalence data:', error);
+                });
+        }
+    });
+    
+    function updateReferenceOptions(selectedTestId) {
+        const referenceSelect = document.getElementById('reference_dataset_id');
+        if (!referenceSelect) return;
+        
+        // Enable all options
+        Array.from(referenceSelect.options).forEach(option => {
+            option.disabled = false;
+        });
+        
+        // Disable the option that matches the test dataset
+        const matchingOption = referenceSelect.querySelector(`option[value="${selectedTestId}"]`);
+        if (matchingOption) {
+            matchingOption.disabled = true;
+        }
+        
+        // If the currently selected reference is now disabled, select the first enabled option
+        if (referenceSelect.selectedOptions[0] && referenceSelect.selectedOptions[0].disabled) {
+            const firstEnabled = Array.from(referenceSelect.options).find(opt => !opt.disabled);
+            if (firstEnabled) {
+                referenceSelect.value = firstEnabled.value;
+            }
+        }
+    }
+
+    function updateTestOptions(selectedReferenceId) {
+        const testSelect = document.getElementById('test_dataset_id');
+        if (!testSelect) return;
+        
+        // Enable all options
+        Array.from(testSelect.options).forEach(option => {
+            option.disabled = false;
+        });
+        
+        // Disable the option that matches the reference dataset
+        const matchingOption = testSelect.querySelector(`option[value="${selectedReferenceId}"]`);
+        if (matchingOption) {
+            matchingOption.disabled = true;
+        }
+        
+        // If the currently selected test is now disabled, select the first enabled option
+        if (testSelect.selectedOptions[0] && testSelect.selectedOptions[0].disabled) {
+            const firstEnabled = Array.from(testSelect.options).find(opt => !opt.disabled);
+            if (firstEnabled) {
+                testSelect.value = firstEnabled.value;
+            }
+        }
+    }
+</script>
+{% endblock %}

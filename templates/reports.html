@@ -1,0 +1,356 @@
+{% extends 'base.html' %}
+
+{% block title %}Reports - PK Analysis Platform{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-file-pdf"></i> Reports</h1>
+        <p class="lead">Generate, view, and download analysis reports</p>
+        <hr>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Report Generation Form -->
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-cogs"></i> Report Configuration</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('reports') }}" method="post" class="needs-validation" novalidate>
+                    <div class="mb-3">
+                        <label for="analysis_id" class="form-label">Select Analysis</label>
+                        <select class="form-select" id="analysis_id" name="analysis_id" required>
+                            <option value="" selected disabled>Choose an analysis...</option>
+                            {% for analysis in analyses %}
+                            <option value="{{ analysis.id }}" {% if request.args.get('analysis_id')|int == analysis.id %}selected{% endif %}>
+                                {{ analysis.name }} ({{ analysis.type }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="invalid-feedback">Please select an analysis.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="report_name" class="form-label">Report Name</label>
+                        <input type="text" class="form-control" id="report_name" name="report_name" 
+                               placeholder="e.g., Study001 PK Report" required>
+                        <div class="invalid-feedback">Please provide a report name.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="report_type" class="form-label">Report Format</label>
+                        <select class="form-select" id="report_type" name="report_type">
+                            <option value="pdf" selected>PDF</option>
+                            <!-- Additional formats could be added in the future -->
+                        </select>
+                    </div>
+                    
+                    <!-- Report Content Options -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">Content Options</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="include_summary" name="include_summary" checked>
+                                <label class="form-check-label" for="include_summary">
+                                    Include Summary Statistics
+                                </label>
+                            </div>
+                            
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="include_individual" name="include_individual" checked>
+                                <label class="form-check-label" for="include_individual">
+                                    Include Individual Subject Data
+                                </label>
+                            </div>
+                            
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="include_plots" name="include_plots" checked>
+                                <label class="form-check-label" for="include_plots">
+                                    Include Plots and Visualizations
+                                </label>
+                            </div>
+                            
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="include_raw_data" name="include_raw_data">
+                                <label class="form-check-label" for="include_raw_data">
+                                    Include Raw Data Tables
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Report Customization -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">Customization</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="report_title" class="form-label">Custom Title (Optional)</label>
+                                <input type="text" class="form-control" id="report_title" name="report_title" 
+                                       placeholder="e.g., Pharmacokinetic Analysis Report">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="author" class="form-label">Author (Optional)</label>
+                                <input type="text" class="form-control" id="author" name="author" 
+                                       placeholder="e.g., John Smith">
+                            </div>
+                            
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="include_date" name="include_date" checked>
+                                <label class="form-check-label" for="include_date">
+                                    Include Generation Date
+                                </label>
+                            </div>
+                            
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="include_page_numbers" name="include_page_numbers" checked>
+                                <label class="form-check-label" for="include_page_numbers">
+                                    Include Page Numbers
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-file-pdf me-2"></i> Generate Report
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Reports List and Preview -->
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-list"></i> Generated Reports</h5>
+            </div>
+            <div class="card-body">
+                {% if report %}
+                    <!-- Single Report View -->
+                    <div class="alert alert-success">
+                        <h6>Report: {{ report.name }}</h6>
+                        <p>Report generated successfully</p>
+                    </div>
+                    
+                    <div class="card mb-3 bg-dark-subtle">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-1">{{ report.name }}</h6>
+                                    <p class="text-muted mb-0 small">Created: {{ report.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                                    <p class="text-muted mb-0 small">Analysis: {{ report.analysis.name }} ({{ report.analysis.type }})</p>
+                                </div>
+                                <div>
+                                    <a href="{{ url_for('download_report', report_id=report.id) }}" class="btn btn-primary">
+                                        <i class="fas fa-download me-2"></i> Download
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Report preview placeholder -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">Report Preview</h6>
+                        </div>
+                        <div class="card-body text-center" style="height: 400px; overflow: hidden;">
+                            <div class="d-flex flex-column justify-content-center align-items-center h-100">
+                                <i class="fas fa-file-pdf fa-4x mb-3 text-muted"></i>
+                                <h5>{{ report.name }}</h5>
+                                <p class="text-muted">PDF document generated successfully.</p>
+                                <a href="{{ url_for('download_report', report_id=report.id) }}" class="btn btn-primary mt-2">
+                                    <i class="fas fa-download me-2"></i> Download Report
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                {% elif reports %}
+                    <!-- Reports List -->
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Report Name</th>
+                                    <th>Analysis Type</th>
+                                    <th>Created</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for report in reports %}
+                                <tr>
+                                    <td>{{ report.name }}</td>
+                                    <td>{{ report.analysis.type }}</td>
+                                    <td>{{ report.created_at.strftime('%Y-%m-%d') }}</td>
+                                    <td class="text-end">
+                                        <a href="{{ url_for('report_detail', report_id=report.id) }}" class="btn btn-sm btn-info">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a href="{{ url_for('download_report', report_id=report.id) }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-download"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-file-pdf fa-4x mb-3 text-muted"></i>
+                        <h5>No Reports Available</h5>
+                        <p class="text-muted">Configure and generate a report to see it here.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        {% if analyses %}
+        <!-- Analysis Selection Guide -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-info-circle"></i> Report Types Guide</h5>
+            </div>
+            <div class="card-body">
+                <div class="accordion" id="reportTypesAccordion">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="ncaReportHeading">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                    data-bs-target="#ncaReportCollapse" aria-expanded="false" aria-controls="ncaReportCollapse">
+                                NCA Reports
+                            </button>
+                        </h2>
+                        <div id="ncaReportCollapse" class="accordion-collapse collapse" aria-labelledby="ncaReportHeading">
+                            <div class="accordion-body">
+                                <p>NCA reports include calculated pharmacokinetic parameters such as:</p>
+                                <ul>
+                                    <li>AUC (Area Under the Curve)</li>
+                                    <li>Cmax (Maximum Concentration)</li>
+                                    <li>Tmax (Time to Maximum Concentration)</li>
+                                    <li>t1/2 (Half-life)</li>
+                                    <li>Concentration-time profiles</li>
+                                </ul>
+                                <p class="mb-0">These reports are ideal for standard PK parameter reporting and bioavailability assessments.</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="compartmentalReportHeading">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                    data-bs-target="#compartmentalReportCollapse" aria-expanded="false" aria-controls="compartmentalReportCollapse">
+                                Compartmental Model Reports
+                            </button>
+                        </h2>
+                        <div id="compartmentalReportCollapse" class="accordion-collapse collapse" aria-labelledby="compartmentalReportHeading">
+                            <div class="accordion-body">
+                                <p>Compartmental model reports include:</p>
+                                <ul>
+                                    <li>Model parameters (e.g., ka, Vd, CL)</li>
+                                    <li>Goodness-of-fit metrics (R², RMSE)</li>
+                                    <li>Observed vs. predicted concentration plots</li>
+                                    <li>Residual analysis</li>
+                                </ul>
+                                <p class="mb-0">These reports are useful for in-depth PK analysis and model-based approaches.</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="bioequivalenceReportHeading">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                    data-bs-target="#bioequivalenceReportCollapse" aria-expanded="false" aria-controls="bioequivalenceReportCollapse">
+                                Bioequivalence Reports
+                            </button>
+                        </h2>
+                        <div id="bioequivalenceReportCollapse" class="accordion-collapse collapse" aria-labelledby="bioequivalenceReportHeading">
+                            <div class="accordion-body">
+                                <p>Bioequivalence reports include:</p>
+                                <ul>
+                                    <li>Test/Reference ratio for key parameters</li>
+                                    <li>90% Confidence Intervals</li>
+                                    <li>ANOVA or t-test results</li>
+                                    <li>Intra-subject variability</li>
+                                    <li>Bioequivalence assessment based on standard criteria (80-125%)</li>
+                                </ul>
+                                <p class="mb-0">These reports are formatted for regulatory submissions and bioequivalence studies.</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="statisticsReportHeading">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                    data-bs-target="#statisticsReportCollapse" aria-expanded="false" aria-controls="statisticsReportCollapse">
+                                Statistical Reports
+                            </button>
+                        </h2>
+                        <div id="statisticsReportCollapse" class="accordion-collapse collapse" aria-labelledby="statisticsReportHeading">
+                            <div class="accordion-body">
+                                <p>Statistical reports include:</p>
+                                <ul>
+                                    <li>Descriptive statistics (mean, SD, CV%)</li>
+                                    <li>Hypothesis test results (t-test, ANOVA)</li>
+                                    <li>Regression analysis results</li>
+                                    <li>Significance testing and p-values</li>
+                                </ul>
+                                <p class="mb-0">These reports focus on statistical analysis of pharmacokinetic data.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Automatically generate report name based on analysis selection
+        const analysisSelect = document.getElementById('analysis_id');
+        const reportNameInput = document.getElementById('report_name');
+        
+        if (analysisSelect && reportNameInput) {
+            analysisSelect.addEventListener('change', function() {
+                const selectedOption = this.options[this.selectedIndex];
+                if (selectedOption.value) {
+                    // Extract analysis name and type from the option text
+                    const analysisText = selectedOption.text;
+                    const analysisType = analysisText.match(/\((.*?)\)$/)[1];
+                    const analysisName = analysisText.replace(/ \(.*?\)$/, '');
+                    
+                    // Generate report name
+                    reportNameInput.value = `${analysisName} - ${analysisType} Report`;
+                }
+            });
+            
+            // Trigger the change event if an analysis is pre-selected
+            if (analysisSelect.value) {
+                analysisSelect.dispatchEvent(new Event('change'));
+            }
+        }
+        
+        // Toggle content options based on report type
+        const reportTypeSelect = document.getElementById('report_type');
+        if (reportTypeSelect) {
+            reportTypeSelect.addEventListener('change', function() {
+                // Future functionality for different report types
+            });
+        }
+    });
+</script>
+{% endblock %}

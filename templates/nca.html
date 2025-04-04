@@ -1,0 +1,390 @@
+{% extends 'base.html' %}
+
+{% block title %}Non-Compartmental Analysis - PK Analysis Platform{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-chart-area"></i> Non-Compartmental Analysis</h1>
+        <p class="lead">Calculate pharmacokinetic parameters from concentration-time data</p>
+        <hr>
+    </div>
+</div>
+
+<div class="row">
+    <!-- NCA Analysis Form -->
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-cogs"></i> Analysis Configuration</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('nca') }}" method="post" class="needs-validation" novalidate>
+                    <div class="mb-3">
+                        <label for="dataset_id" class="form-label">Select Dataset</label>
+                        <select class="form-select" id="dataset_id" name="dataset_id" required>
+                            <option value="" selected disabled>Choose a dataset...</option>
+                            {% for dataset in datasets %}
+                            <option value="{{ dataset.id }}">{{ dataset.name }} ({{ dataset.study.name }})</option>
+                            {% endfor %}
+                        </select>
+                        <div class="invalid-feedback">Please select a dataset.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="analysis_name" class="form-label">Analysis Name</label>
+                        <input type="text" class="form-control" id="analysis_name" name="analysis_name" 
+                               placeholder="e.g., Study001 NCA Analysis" required>
+                        <div class="invalid-feedback">Please provide an analysis name.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="method" class="form-label">Calculation Method</label>
+                        <select class="form-select" id="method" name="method">
+                            <option value="linear-log" selected>Linear-Log Trapezoidal</option>
+                            <option value="linear">Linear Trapezoidal</option>
+                            <option value="log">Log Trapezoidal</option>
+                        </select>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="dose" class="form-label">Dose (Optional)</label>
+                                <input type="number" class="form-control" id="dose" name="dose" 
+                                       min="0" step="0.01" placeholder="e.g., 100">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="dose_unit" class="form-label">Dose Unit</label>
+                                <select class="form-select" id="dose_unit" name="dose_unit">
+                                    <option value="mg" selected>mg</option>
+                                    <option value="μg">μg</option>
+                                    <option value="ng">ng</option>
+                                    <option value="mg/kg">mg/kg</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="conc_unit" class="form-label">Concentration Unit</label>
+                                <select class="form-select" id="conc_unit" name="conc_unit">
+                                    <option value="ng/mL" selected>ng/mL</option>
+                                    <option value="μg/mL">μg/mL</option>
+                                    <option value="mg/mL">mg/mL</option>
+                                    <option value="μM">μM</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="time_unit" class="form-label">Time Unit</label>
+                                <select class="form-select" id="time_unit" name="time_unit">
+                                    <option value="h" selected>hours</option>
+                                    <option value="min">minutes</option>
+                                    <option value="day">days</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-calculator me-2"></i> Calculate NCA Parameters
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- NCA Results (if available) -->
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-bar"></i> Results</h5>
+            </div>
+            <div class="card-body">
+                {% if analysis %}
+                    <input type="hidden" id="analysisId" value="{{ analysis.id }}">
+                    <div class="alert alert-success">
+                        <h6>Analysis: {{ analysis.name }}</h6>
+                        <p>Analysis completed successfully</p>
+                    </div>
+                    
+                    <ul class="nav nav-tabs" id="ncaResultTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="summary-tab" data-bs-toggle="tab" data-bs-target="#summary" 
+                                    type="button" role="tab" aria-controls="summary" aria-selected="true">Summary</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="individual-tab" data-bs-toggle="tab" data-bs-target="#individual" 
+                                    type="button" role="tab" aria-controls="individual" aria-selected="false">Individual</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="plots-tab" data-bs-toggle="tab" data-bs-target="#plots" 
+                                    type="button" role="tab" aria-controls="plots" aria-selected="false">Plots</button>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content pt-3" id="ncaResultTabContent">
+                        <!-- Summary Tab -->
+                        <div class="tab-pane fade show active" id="summary" role="tabpanel" aria-labelledby="summary-tab">
+                            {% set results = analysis.results|tojson|fromjson %}
+                            {% if results.summary %}
+                                <h6>Summary Statistics</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Parameter</th>
+                                                <th>Mean</th>
+                                                <th>SD</th>
+                                                <th>CV%</th>
+                                                <th>Min</th>
+                                                <th>Max</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for key, value in results.summary.items() %}
+                                                {% if key.endswith('_mean') %}
+                                                    {% set param = key.replace('_mean', '') %}
+                                                    <tr>
+                                                        <td>{{ param|upper }}</td>
+                                                        <td>{{ "%.4g"|format(value) }}</td>
+                                                        <td>{{ "%.4g"|format(results.summary[param + '_sd']) if param + '_sd' in results.summary else 'N/A' }}</td>
+                                                        <td>{{ "%.2f"|format(results.summary[param + '_cv']) if param + '_cv' in results.summary else 'N/A' }}</td>
+                                                        <td>{{ "%.4g"|format(results.summary[param + '_min']) if param + '_min' in results.summary else 'N/A' }}</td>
+                                                        <td>{{ "%.4g"|format(results.summary[param + '_max']) if param + '_max' in results.summary else 'N/A' }}</td>
+                                                    </tr>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% else %}
+                                <div class="alert alert-info">No summary data available.</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Individual Tab -->
+                        <div class="tab-pane fade" id="individual" role="tabpanel" aria-labelledby="individual-tab">
+                            {% set results = analysis.results|tojson|fromjson %}
+                            {% set subjects = [subject_id for subject_id in results if subject_id != 'summary'] %}
+                            
+                            {% if subjects %}
+                                <h6>Individual Subject Parameters</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Subject</th>
+                                                <th>Cmax</th>
+                                                <th>Tmax</th>
+                                                <th>AUClast</th>
+                                                <th>AUCinf</th>
+                                                <th>t1/2</th>
+                                                <th>MRT</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for subject_id in subjects %}
+                                                <tr>
+                                                    <td>{{ subject_id }}</td>
+                                                    <td>{{ "%.4g"|format(results[subject_id].cmax) if results[subject_id].cmax is not none else 'N/A' }}</td>
+                                                    <td>{{ "%.4g"|format(results[subject_id].tmax) if results[subject_id].tmax is not none else 'N/A' }}</td>
+                                                    <td>{{ "%.4g"|format(results[subject_id].auc_last) if results[subject_id].auc_last is not none else 'N/A' }}</td>
+                                                    <td>{{ "%.4g"|format(results[subject_id].auc_inf) if results[subject_id].auc_inf is not none else 'N/A' }}</td>
+                                                    <td>{{ "%.4g"|format(results[subject_id].half_life) if results[subject_id].half_life is not none else 'N/A' }}</td>
+                                                    <td>{{ "%.4g"|format(results[subject_id].mrt) if results[subject_id].mrt is not none else 'N/A' }}</td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <!-- Lambda Z details for individual subjects -->
+                                <h6 class="mt-4">Elimination Phase Details</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Subject</th>
+                                                <th>λz</th>
+                                                <th>R²</th>
+                                                <th>AUC Extrap (%)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for subject_id in subjects %}
+                                                <tr>
+                                                    <td>{{ subject_id }}</td>
+                                                    <td>{{ "%.4g"|format(results[subject_id].lambda_z) if results[subject_id].lambda_z is not none else 'N/A' }}</td>
+                                                    <td>{{ "%.4g"|format(results[subject_id].r_squared) if results[subject_id].r_squared is not none else 'N/A' }}</td>
+                                                    <td>{{ "%.2f"|format(results[subject_id].pct_extrap) if results[subject_id].pct_extrap is not none else 'N/A' }}</td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <div class="mt-4">
+                                    <a href="{{ url_for('reports') }}?analysis_id={{ analysis.id }}" class="btn btn-secondary">
+                                        <i class="fas fa-file-pdf me-2"></i> Generate Report
+                                    </a>
+                                </div>
+                            {% else %}
+                                <div class="alert alert-info">No individual data available.</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Plots Tab -->
+                        <div class="tab-pane fade" id="plots" role="tabpanel" aria-labelledby="plots-tab">
+                            <div class="row mb-3">
+                                <div class="col-12">
+                                    <div class="card bg-dark">
+                                        <div class="card-body">
+                                            <h6 class="card-title">Concentration vs. Time</h6>
+                                            <div id="concTimeLinear" class="plot-container"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-12">
+                                    <div class="card bg-dark">
+                                        <div class="card-body">
+                                            <h6 class="card-title">Semi-Log Concentration vs. Time</h6>
+                                            <div id="concTimeSemilog" class="plot-container"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-chart-area fa-4x mb-3 text-muted"></i>
+                        <h5>No Analysis Results</h5>
+                        <p class="text-muted">Configure and run an analysis to see results here.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dataset Preview Modal -->
+<div class="modal fade" id="datasetPreviewModal" tabindex="-1" aria-labelledby="datasetPreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="datasetPreviewModalLabel">Dataset Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="datasetPreviewContent" class="table-responsive"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // For NCA result visualization
+        if (document.getElementById('analysisId')) {
+            const analysisId = document.getElementById('analysisId').value;
+            
+            // Fetch analysis data for plotting
+            fetch(`/api/analysis/${analysisId}/plot-data`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        renderNCAPlots(data.data);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading NCA data:', error);
+                });
+        }
+        
+        // Preview dataset when selected
+        const datasetSelect = document.getElementById('dataset_id');
+        if (datasetSelect) {
+            datasetSelect.addEventListener('change', function() {
+                const datasetId = this.value;
+                if (datasetId) {
+                    fetch(`/api/dataset/${datasetId}/preview`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                // Show preview button and register click event
+                                const selectDiv = this.closest('div');
+                                
+                                // Remove existing preview button if any
+                                const existingBtn = selectDiv.querySelector('.preview-btn');
+                                if (existingBtn) {
+                                    existingBtn.remove();
+                                }
+                                
+                                // Add new preview button
+                                const previewBtn = document.createElement('button');
+                                previewBtn.className = 'btn btn-sm btn-info mt-2 preview-btn';
+                                previewBtn.innerHTML = '<i class="fas fa-table me-1"></i> Preview Data';
+                                previewBtn.type = 'button';
+                                previewBtn.setAttribute('data-dataset-id', datasetId);
+                                
+                                previewBtn.addEventListener('click', function() {
+                                    const id = this.getAttribute('data-dataset-id');
+                                    showDatasetPreview(id);
+                                });
+                                
+                                selectDiv.appendChild(previewBtn);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error loading dataset preview:', error);
+                        });
+                }
+            });
+        }
+    });
+    
+    function showDatasetPreview(datasetId) {
+        fetch(`/api/dataset/${datasetId}/preview`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Create preview table
+                    let tableHTML = '<table class="table table-sm table-striped">';
+                    tableHTML += '<thead><tr><th>Subject ID</th><th>Time</th><th>Concentration</th></tr></thead>';
+                    tableHTML += '<tbody>';
+                    
+                    data.data.forEach(sample => {
+                        tableHTML += `<tr><td>${sample.subject_id}</td><td>${sample.time}</td><td>${sample.concentration}</td></tr>`;
+                    });
+                    
+                    tableHTML += '</tbody></table>';
+                    
+                    document.getElementById('datasetPreviewContent').innerHTML = tableHTML;
+                    
+                    // Show modal
+                    const previewModal = new bootstrap.Modal(document.getElementById('datasetPreviewModal'));
+                    previewModal.show();
+                }
+            })
+            .catch(error => {
+                console.error('Error showing dataset preview:', error);
+            });
+    }
+</script>
+{% endblock %}

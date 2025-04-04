@@ -1,0 +1,437 @@
+{% extends 'base.html' %}
+
+{% block title %}Data Processing - PK Analysis Platform{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-table"></i> Data Processing</h1>
+        <p class="lead">Transform, filter, and manipulate PK datasets</p>
+        <hr>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <!-- Tabs for different data processing tools -->
+        <div class="card">
+            <div class="card-header">
+                <ul class="nav nav-tabs card-header-tabs" id="dataProcessingTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="transform-tab" data-bs-toggle="tab" data-bs-target="#transform" 
+                                type="button" role="tab" aria-controls="transform" aria-selected="true">
+                            <i class="fas fa-exchange-alt me-2"></i>Transform
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="filter-tab" data-bs-toggle="tab" data-bs-target="#filter" 
+                                type="button" role="tab" aria-controls="filter" aria-selected="false">
+                            <i class="fas fa-filter me-2"></i>Filter
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="merge-tab" data-bs-toggle="tab" data-bs-target="#merge" 
+                                type="button" role="tab" aria-controls="merge" aria-selected="false">
+                            <i class="fas fa-object-group me-2"></i>Merge
+                        </button>
+                    </li>
+                    {% if dataset %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="preview-tab" data-bs-toggle="tab" data-bs-target="#preview" 
+                                type="button" role="tab" aria-controls="preview" aria-selected="false">
+                            <i class="fas fa-eye me-2"></i>Dataset Preview
+                        </button>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+            <div class="card-body">
+                <div class="tab-content" id="dataProcessingTabContent">
+                    <!-- Data Transformation Tab -->
+                    <div class="tab-pane fade show active" id="transform" role="tabpanel" aria-labelledby="transform-tab">
+                        <h5 class="mb-3">Data Transformation</h5>
+                        <form action="{{ url_for('data_processing') }}" method="post" class="needs-validation" novalidate>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="dataset_id" class="form-label">Select Dataset</label>
+                                        <select class="form-select" id="dataset_id" name="dataset_id" required>
+                                            <option value="" selected disabled>Choose a dataset...</option>
+                                            {% for dataset in datasets %}
+                                            <option value="{{ dataset.id }}">{{ dataset.name }} ({{ dataset.study.name }})</option>
+                                            {% endfor %}
+                                        </select>
+                                        <div class="invalid-feedback">Please select a dataset.</div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="transformation" class="form-label">Transformation Type</label>
+                                        <select class="form-select" id="transformation" name="transformation" required>
+                                            <option value="" selected disabled>Select transformation...</option>
+                                            <option value="log">Logarithmic (ln)</option>
+                                            <option value="sqrt">Square Root</option>
+                                            <option value="normalize">Normalize (0-1 scale)</option>
+                                            <option value="inverse">Inverse (1/x)</option>
+                                        </select>
+                                        <div class="invalid-feedback">Please select a transformation type.</div>
+                                    </div>
+                                    
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="checkbox" id="save_as_new" name="save_as_new" checked>
+                                        <label class="form-check-label" for="save_as_new">
+                                            Save as new dataset
+                                        </label>
+                                    </div>
+                                    
+                                    <div class="mb-3" id="newDatasetNameDiv">
+                                        <label for="new_dataset_name" class="form-label">New Dataset Name</label>
+                                        <input type="text" class="form-control" id="new_dataset_name" name="new_dataset_name" 
+                                               placeholder="e.g., Dataset1_Log">
+                                        <div class="invalid-feedback">Please provide a name for the new dataset.</div>
+                                    </div>
+                                    
+                                    <div class="d-grid">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fas fa-magic me-2"></i> Apply Transformation
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div id="transformationDescription">
+                                        <!-- Transformation description will be populated by JavaScript -->
+                                    </div>
+                                    
+                                    <div id="dataPreview" class="mt-3">
+                                        <!-- Data preview will be populated by JavaScript -->
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <!-- Data Filtering Tab -->
+                    <div class="tab-pane fade" id="filter" role="tabpanel" aria-labelledby="filter-tab">
+                        <h5 class="mb-3">Data Filtering</h5>
+                        <form id="filterForm" action="{{ url_for('data_processing') }}" method="post" class="needs-validation" novalidate>
+                            <input type="hidden" name="processing_type" value="filter">
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="filter_dataset_id" class="form-label">Select Dataset</label>
+                                        <select class="form-select" id="filter_dataset_id" name="dataset_id" required>
+                                            <option value="" selected disabled>Choose a dataset...</option>
+                                            {% for dataset in datasets %}
+                                            <option value="{{ dataset.id }}">{{ dataset.name }} ({{ dataset.study.name }})</option>
+                                            {% endfor %}
+                                        </select>
+                                        <div class="invalid-feedback">Please select a dataset.</div>
+                                    </div>
+                                    
+                                    <div class="card mb-3">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">Filter Criteria</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div id="filterCriteria">
+                                                <!-- Filter rows will be added here by JavaScript -->
+                                            </div>
+                                            
+                                            <button type="button" id="addFilterBtn" class="btn btn-sm btn-outline-secondary mt-2">
+                                                <i class="fas fa-plus-circle me-2"></i>Add Criterion
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="checkbox" id="filter_save_as_new" name="save_as_new" checked>
+                                        <label class="form-check-label" for="filter_save_as_new">
+                                            Save as new dataset
+                                        </label>
+                                    </div>
+                                    
+                                    <div class="mb-3" id="filterNewDatasetNameDiv">
+                                        <label for="filter_new_dataset_name" class="form-label">New Dataset Name</label>
+                                        <input type="text" class="form-control" id="filter_new_dataset_name" name="new_dataset_name" 
+                                               placeholder="e.g., Dataset1_Filtered">
+                                        <div class="invalid-feedback">Please provide a name for the new dataset.</div>
+                                    </div>
+                                    
+                                    <div class="d-grid">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fas fa-filter me-2"></i> Apply Filters
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="alert alert-info">
+                                        <h6>Filter Usage</h6>
+                                        <p>Use filters to create a subset of your data based on specified criteria:</p>
+                                        <ul>
+                                            <li><strong>Subject ID filtering:</strong> Select specific subjects</li>
+                                            <li><strong>Time range filtering:</strong> Focus on specific time periods</li>
+                                            <li><strong>Concentration thresholds:</strong> Remove outliers or values below LLOQ</li>
+                                        </ul>
+                                        <p class="mb-0">Multiple criteria will be combined with AND logic.</p>
+                                    </div>
+                                    
+                                    <div id="filterDataPreview" class="mt-3">
+                                        <!-- Data preview will be populated by JavaScript -->
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <!-- Data Merging Tab -->
+                    <div class="tab-pane fade" id="merge" role="tabpanel" aria-labelledby="merge-tab">
+                        <h5 class="mb-3">Data Merging</h5>
+                        <form id="mergeForm" action="{{ url_for('data_processing') }}" method="post" class="needs-validation" novalidate>
+                            <input type="hidden" name="processing_type" value="merge">
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="primary_dataset_id" class="form-label">Primary Dataset</label>
+                                        <select class="form-select" id="primary_dataset_id" name="primary_dataset_id" required>
+                                            <option value="" selected disabled>Choose primary dataset...</option>
+                                            {% for dataset in datasets %}
+                                            <option value="{{ dataset.id }}">{{ dataset.name }} ({{ dataset.study.name }})</option>
+                                            {% endfor %}
+                                        </select>
+                                        <div class="invalid-feedback">Please select a primary dataset.</div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="secondary_dataset_id" class="form-label">Secondary Dataset</label>
+                                        <select class="form-select" id="secondary_dataset_id" name="secondary_dataset_id" required>
+                                            <option value="" selected disabled>Choose secondary dataset...</option>
+                                            {% for dataset in datasets %}
+                                            <option value="{{ dataset.id }}">{{ dataset.name }} ({{ dataset.study.name }})</option>
+                                            {% endfor %}
+                                        </select>
+                                        <div class="invalid-feedback">Please select a secondary dataset.</div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="merge_type" class="form-label">Merge Type</label>
+                                        <select class="form-select" id="merge_type" name="merge_type" required>
+                                            <option value="" selected disabled>Select merge type...</option>
+                                            <option value="append">Append (Add subjects from secondary dataset)</option>
+                                            <option value="merge">Merge (Combine time points for matching subjects)</option>
+                                            <option value="join">Join (Match by subject ID, keep only common subjects)</option>
+                                        </select>
+                                        <div class="invalid-feedback">Please select a merge type.</div>
+                                    </div>
+                                    
+                                    <!-- Subject mapping section (for merge and join) -->
+                                    <div id="subjectMappingSection" style="display: none;">
+                                        <div class="card mb-3">
+                                            <div class="card-header">
+                                                <h6 class="mb-0">Subject Mapping</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="radio" name="subject_mapping" 
+                                                           id="subject_mapping_auto" value="auto" checked>
+                                                    <label class="form-check-label" for="subject_mapping_auto">
+                                                        Automatic (match by subject ID)
+                                                    </label>
+                                                </div>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="radio" name="subject_mapping" 
+                                                           id="subject_mapping_custom" value="custom">
+                                                    <label class="form-check-label" for="subject_mapping_custom">
+                                                        Custom mapping
+                                                    </label>
+                                                </div>
+                                                <div id="customMappingFields" style="display: none;">
+                                                    <p class="text-muted small">Coming soon</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Time alignment section (for merge) -->
+                                    <div id="timeAlignmentSection" style="display: none;">
+                                        <div class="card mb-3">
+                                            <div class="card-header">
+                                                <h6 class="mb-0">Time Alignment</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="radio" name="time_alignment" 
+                                                           id="time_exact_match" value="exact" checked>
+                                                    <label class="form-check-label" for="time_exact_match">
+                                                        Exact time point matching
+                                                    </label>
+                                                </div>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="radio" name="time_alignment" 
+                                                           id="time_interpolate" value="interpolate">
+                                                    <label class="form-check-label" for="time_interpolate">
+                                                        Interpolate missing time points
+                                                    </label>
+                                                </div>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="radio" name="time_alignment" 
+                                                           id="time_all" value="all">
+                                                    <label class="form-check-label" for="time_all">
+                                                        Use all time points from both datasets
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="merge_dataset_name" class="form-label">New Dataset Name</label>
+                                        <input type="text" class="form-control" id="merge_dataset_name" name="new_dataset_name" 
+                                               placeholder="e.g., Merged_Dataset" required>
+                                        <div class="invalid-feedback">Please provide a name for the merged dataset.</div>
+                                    </div>
+                                    
+                                    <div class="d-grid">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fas fa-object-group me-2"></i> Merge Datasets
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="alert alert-info">
+                                        <h6>Merge Types Explained</h6>
+                                        <p><strong>Append:</strong> Combines datasets by adding all subjects from the secondary dataset to the primary dataset. Use when datasets contain different subjects.</p>
+                                        <p><strong>Merge:</strong> Combines time-concentration data for matching subjects across datasets. Useful for combining data from different study periods or treatments.</p>
+                                        <p><strong>Join:</strong> Creates a dataset containing only subjects that exist in both datasets. Useful for creating matched datasets for comparative analysis.</p>
+                                    </div>
+                                    
+                                    <div id="mergePrimaryPreview" class="mt-3">
+                                        <!-- Primary dataset preview -->
+                                    </div>
+                                    
+                                    <div id="mergeSecondaryPreview" class="mt-3">
+                                        <!-- Secondary dataset preview -->
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <!-- Dataset Preview Tab (if viewing a specific dataset) -->
+                    {% if dataset %}
+                    <div class="tab-pane fade" id="preview" role="tabpanel" aria-labelledby="preview-tab">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card mb-3">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">Dataset Information</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <p><strong>Name:</strong> {{ dataset.name }}</p>
+                                        <p><strong>Study:</strong> {{ dataset.study.name }}</p>
+                                        <p><strong>Description:</strong> {{ dataset.description or 'No description available' }}</p>
+                                        <p><strong>File Type:</strong> {{ dataset.file_type }}</p>
+                                        <p><strong>Created:</strong> {{ dataset.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                                        <p><strong>Subjects:</strong> {{ dataset.subjects|length }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="card mb-3">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">Data Summary</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="dataPlotPreview" class="plot-container"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Data Preview</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Subject ID</th>
+                                                <th>Time</th>
+                                                <th>Concentration</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for subject in dataset.subjects %}
+                                                {% for sample in subject.samples[:10] %}
+                                                    <tr>
+                                                        <td>{{ subject.subject_id }}</td>
+                                                        <td>{{ sample.time }}</td>
+                                                        <td>{{ sample.concentration }}</td>
+                                                    </tr>
+                                                {% endfor %}
+                                                {% if subject.samples|length > 10 %}
+                                                    <tr>
+                                                        <td colspan="3" class="text-center text-muted">... {{ subject.samples|length - 10 }} more samples ...</td>
+                                                    </tr>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/data_processing.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Toggle save as new dataset option
+        const saveAsNewCheckbox = document.getElementById('save_as_new');
+        const newDatasetNameDiv = document.getElementById('newDatasetNameDiv');
+        if (saveAsNewCheckbox && newDatasetNameDiv) {
+            saveAsNewCheckbox.addEventListener('change', function() {
+                newDatasetNameDiv.style.display = this.checked ? 'block' : 'none';
+            });
+        }
+        
+        // Same for filter tab
+        const filterSaveAsNewCheckbox = document.getElementById('filter_save_as_new');
+        const filterNewDatasetNameDiv = document.getElementById('filterNewDatasetNameDiv');
+        if (filterSaveAsNewCheckbox && filterNewDatasetNameDiv) {
+            filterSaveAsNewCheckbox.addEventListener('change', function() {
+                filterNewDatasetNameDiv.style.display = this.checked ? 'block' : 'none';
+            });
+        }
+        
+        // Toggle custom mapping fields
+        const subjectMappingRadios = document.querySelectorAll('input[name="subject_mapping"]');
+        const customMappingFields = document.getElementById('customMappingFields');
+        if (subjectMappingRadios.length && customMappingFields) {
+            subjectMappingRadios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    customMappingFields.style.display = this.value === 'custom' ? 'block' : 'none';
+                });
+            });
+        }
+        
+        {% if dataset %}
+        // Load plot data for dataset if we're viewing a specific dataset
+        fetchAndRenderDatasetPlot({{ dataset.id }});
+        {% endif %}
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,416 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - PK Analysis Platform{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-home"></i> Dashboard</h1>
+        <hr>
+    </div>
+</div>
+
+<!-- Quick Actions and Study Management -->
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-tasks"></i> Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <a href="{{ url_for('nca') }}" class="btn btn-primary w-100">
+                            <i class="fas fa-chart-area me-2"></i> New NCA Analysis
+                        </a>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <a href="{{ url_for('compartmental') }}" class="btn btn-info w-100">
+                            <i class="fas fa-chart-line me-2"></i> Compartmental Modeling
+                        </a>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <a href="{{ url_for('bioequivalence') }}" class="btn btn-success w-100">
+                            <i class="fas fa-pills me-2"></i> Bioequivalence Analysis
+                        </a>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <a href="{{ url_for('reports') }}" class="btn btn-secondary w-100">
+                            <i class="fas fa-file-pdf me-2"></i> Generate Reports
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-folder-open"></i> Study Management</h5>
+            </div>
+            <div class="card-body">
+                <button class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#newStudyModal">
+                    <i class="fas fa-plus-circle me-2"></i> Create New Study
+                </button>
+                
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Study Name</th>
+                                <th>Created</th>
+                                <th>Datasets</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if studies %}
+                                {% for study in studies %}
+                                <tr>
+                                    <td>{{ study.name }}</td>
+                                    <td>{{ study.created_at.strftime('%Y-%m-%d') }}</td>
+                                    <td>{{ study.datasets|length }}</td>
+                                    <td>
+                                        <a href="{{ url_for('study_detail', study_id=study.id) }}" class="btn btn-sm btn-info">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center">No studies available</td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Analyses and Data -->
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-history"></i> Recent Analyses</h5>
+            </div>
+            <div class="card-body">
+                <ul class="nav nav-tabs" id="analysisTab" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="nca-tab" data-bs-toggle="tab" data-bs-target="#nca" type="button" role="tab" aria-controls="nca" aria-selected="true">NCA</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="compartmental-tab" data-bs-toggle="tab" data-bs-target="#compartmentalTab" type="button" role="tab" aria-controls="compartmental" aria-selected="false">Compartmental</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="bioequivalence-tab" data-bs-toggle="tab" data-bs-target="#bioequivalenceTab" type="button" role="tab" aria-controls="bioequivalence" aria-selected="false">Bioequivalence</button>
+                    </li>
+                </ul>
+                <div class="tab-content pt-3" id="analysisTabContent">
+                    <div class="tab-pane fade show active" id="nca" role="tabpanel" aria-labelledby="nca-tab">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Analysis Name</th>
+                                        <th>Dataset</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% set nca_analyses = analyses|selectattr('type', 'equalto', 'NCA')|list %}
+                                    {% if nca_analyses %}
+                                        {% for analysis in nca_analyses %}
+                                        <tr>
+                                            <td>{{ analysis.name }}</td>
+                                            <td>{{ analysis.dataset.name }}</td>
+                                            <td>{{ analysis.created_at.strftime('%Y-%m-%d') }}</td>
+                                            <td>
+                                                <a href="{{ url_for('analysis_detail', analysis_id=analysis.id) }}" class="btn btn-sm btn-info">
+                                                    <i class="fas fa-eye"></i>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="4" class="text-center">No NCA analyses available</td>
+                                        </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="compartmentalTab" role="tabpanel" aria-labelledby="compartmental-tab">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Analysis Name</th>
+                                        <th>Dataset</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% set compartmental_analyses = analyses|selectattr('type', 'equalto', 'Compartmental')|list %}
+                                    {% if compartmental_analyses %}
+                                        {% for analysis in compartmental_analyses %}
+                                        <tr>
+                                            <td>{{ analysis.name }}</td>
+                                            <td>{{ analysis.dataset.name }}</td>
+                                            <td>{{ analysis.created_at.strftime('%Y-%m-%d') }}</td>
+                                            <td>
+                                                <a href="{{ url_for('analysis_detail', analysis_id=analysis.id) }}" class="btn btn-sm btn-info">
+                                                    <i class="fas fa-eye"></i>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="4" class="text-center">No compartmental analyses available</td>
+                                        </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="bioequivalenceTab" role="tabpanel" aria-labelledby="bioequivalence-tab">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Analysis Name</th>
+                                        <th>Dataset</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% set be_analyses = analyses|selectattr('type', 'equalto', 'Bioequivalence')|list %}
+                                    {% if be_analyses %}
+                                        {% for analysis in be_analyses %}
+                                        <tr>
+                                            <td>{{ analysis.name }}</td>
+                                            <td>{{ analysis.dataset.name }}</td>
+                                            <td>{{ analysis.created_at.strftime('%Y-%m-%d') }}</td>
+                                            <td>
+                                                <a href="{{ url_for('analysis_detail', analysis_id=analysis.id) }}" class="btn btn-sm btn-info">
+                                                    <i class="fas fa-eye"></i>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="4" class="text-center">No bioequivalence analyses available</td>
+                                        </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if study %}
+<!-- Study Detail View -->
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-folder-open"></i> Study: {{ study.name }}</h5>
+                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadDatasetModal">
+                    <i class="fas fa-upload me-2"></i> Upload Dataset
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <div class="card bg-dark-subtle">
+                            <div class="card-body">
+                                <h6 class="card-title">Study Details</h6>
+                                <p class="card-text"><strong>Created:</strong> {{ study.created_at.strftime('%Y-%m-%d') }}</p>
+                                <p class="card-text"><strong>Description:</strong> {{ study.description or 'No description provided' }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="card bg-dark-subtle">
+                            <div class="card-body">
+                                <h6 class="card-title">Datasets ({{ study.datasets|length }})</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Name</th>
+                                                <th>Type</th>
+                                                <th>Created</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% if study.datasets %}
+                                                {% for dataset in study.datasets %}
+                                                <tr>
+                                                    <td>{{ dataset.name }}</td>
+                                                    <td>{{ dataset.file_type }}</td>
+                                                    <td>{{ dataset.created_at.strftime('%Y-%m-%d') }}</td>
+                                                    <td>
+                                                        <a href="{{ url_for('dataset_detail', dataset_id=dataset.id) }}" class="btn btn-sm btn-info">
+                                                            <i class="fas fa-table"></i>
+                                                        </a>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            {% else %}
+                                                <tr>
+                                                    <td colspan="4" class="text-center">No datasets available</td>
+                                                </tr>
+                                            {% endif %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Create New Study Modal -->
+<div class="modal fade" id="newStudyModal" tabindex="-1" aria-labelledby="newStudyModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="newStudyModalLabel">Create New Study</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('studies') }}" method="post" class="needs-validation" novalidate>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Study Name</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                        <div class="invalid-feedback">
+                            Please provide a study name.
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description (Optional)</label>
+                        <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Study</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Upload Dataset Modal -->
+<div class="modal fade" id="uploadDatasetModal" tabindex="-1" aria-labelledby="uploadDatasetModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="uploadDatasetModalLabel">Upload Dataset</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('upload_dataset', study_id=study.id if study else 0) }}" method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Dataset Name</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                        <div class="invalid-feedback">
+                            Please provide a dataset name.
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description (Optional)</label>
+                        <textarea class="form-control" id="description" name="description" rows="2"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="file" class="form-label">Dataset File (CSV or Excel)</label>
+                        <input type="file" class="form-control" id="file" name="file" accept=".csv,.xlsx,.xls" required>
+                        <div class="invalid-feedback">
+                            Please select a valid file (CSV or Excel).
+                        </div>
+                        <small class="form-text text-muted">
+                            The file should contain columns for subject_id, time, and concentration.
+                        </small>
+                    </div>
+                    <div id="datasetPreview" class="mt-3"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Upload Dataset</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // File upload preview
+        const fileInput = document.getElementById('file');
+        if (fileInput) {
+            fileInput.addEventListener('change', function() {
+                const file = this.files[0];
+                if (file) {
+                    // Preview for CSV files
+                    if (file.name.endsWith('.csv')) {
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            const csvData = e.target.result;
+                            const lines = csvData.split('\n');
+                            let tableHTML = '<div class="table-responsive"><table class="table table-sm">';
+                            
+                            // Header
+                            const headers = lines[0].split(',');
+                            tableHTML += '<thead><tr>';
+                            headers.forEach(header => {
+                                tableHTML += `<th>${header.trim()}</th>`;
+                            });
+                            tableHTML += '</tr></thead><tbody>';
+                            
+                            // Data rows (limit to 5)
+                            for (let i = 1; i < Math.min(lines.length, 6); i++) {
+                                if (lines[i].trim()) {
+                                    tableHTML += '<tr>';
+                                    const cells = lines[i].split(',');
+                                    cells.forEach(cell => {
+                                        tableHTML += `<td>${cell.trim()}</td>`;
+                                    });
+                                    tableHTML += '</tr>';
+                                }
+                            }
+                            
+                            tableHTML += '</tbody></table></div>';
+                            document.getElementById('datasetPreview').innerHTML = '<h6>Preview:</h6>' + tableHTML;
+                        };
+                        reader.readAsText(file);
+                    } else {
+                        document.getElementById('datasetPreview').innerHTML = '<div class="alert alert-info">Preview not available for Excel files. Please upload to see data.</div>';
+                    }
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}

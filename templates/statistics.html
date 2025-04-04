@@ -1,0 +1,533 @@
+{% extends 'base.html' %}
+
+{% block title %}Statistical Analysis - PK Analysis Platform{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-calculator"></i> Statistical Analysis</h1>
+        <p class="lead">Perform statistical tests and analyses on PK data</p>
+        <hr>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Statistical Analysis Form -->
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-cogs"></i> Analysis Configuration</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('statistics') }}" method="post" class="needs-validation" novalidate>
+                    <div class="mb-3">
+                        <label for="dataset_id" class="form-label">Select Dataset</label>
+                        <select class="form-select" id="dataset_id" name="dataset_id" required>
+                            <option value="" selected disabled>Choose a dataset...</option>
+                            {% for dataset in datasets %}
+                            <option value="{{ dataset.id }}">{{ dataset.name }} ({{ dataset.study.name }})</option>
+                            {% endfor %}
+                        </select>
+                        <div class="invalid-feedback">Please select a dataset.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="analysis_name" class="form-label">Analysis Name</label>
+                        <input type="text" class="form-control" id="analysis_name" name="analysis_name" 
+                               placeholder="e.g., Study001 Statistical Analysis" required>
+                        <div class="invalid-feedback">Please provide an analysis name.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="stat_type" class="form-label">Statistical Test</label>
+                        <select class="form-select" id="stat_type" name="stat_type" required>
+                            <option value="" selected disabled>Select statistical test...</option>
+                            <option value="ttest">T-test (1-sample comparison at each timepoint)</option>
+                            <option value="anova">ANOVA (Compare subjects at each timepoint)</option>
+                            <option value="regression">Regression (Linear fit of log-concentrations)</option>
+                        </select>
+                        <div class="invalid-feedback">Please select a statistical test.</div>
+                    </div>
+                    
+                    <div id="statTypeInfo" class="alert alert-light small">
+                        <!-- Test description will be populated by JavaScript -->
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="alpha" class="form-label">Significance Level (α)</label>
+                        <select class="form-select" id="alpha" name="alpha">
+                            <option value="0.05" selected>0.05 (95% confidence)</option>
+                            <option value="0.01">0.01 (99% confidence)</option>
+                            <option value="0.1">0.10 (90% confidence)</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Test-specific options -->
+                    <div id="testOptions">
+                        <!-- Will be populated based on test selection -->
+                        <div id="ttestOptions" style="display: none;">
+                            <div class="mb-3">
+                                <label for="null_value" class="form-label">Null Hypothesis Value</label>
+                                <input type="number" class="form-control" id="null_value" name="null_value" 
+                                       value="0" step="0.01">
+                                <small class="form-text text-muted">Value to test against in one-sample t-test</small>
+                            </div>
+                        </div>
+                        
+                        <div id="anovaOptions" style="display: none;">
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="paired" name="paired" value="1">
+                                <label class="form-check-label" for="paired">
+                                    Paired analysis (if applicable)
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div id="regressionOptions" style="display: none;">
+                            <div class="mb-3">
+                                <label for="terminal_phase" class="form-label">Terminal Phase Selection</label>
+                                <select class="form-select" id="terminal_phase" name="terminal_phase">
+                                    <option value="auto" selected>Automatic (use last 3 or more points)</option>
+                                    <option value="manual">Manual (select time range)</option>
+                                </select>
+                            </div>
+                            
+                            <div id="manualPhaseOptions" style="display: none;">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="start_time" class="form-label">Start Time</label>
+                                            <input type="number" class="form-control" id="start_time" name="start_time" 
+                                                   min="0" step="0.01">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="end_time" class="form-label">End Time</label>
+                                            <input type="number" class="form-control" id="end_time" name="end_time" 
+                                                   min="0" step="0.01">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-calculator me-2"></i> Run Statistical Analysis
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Statistical Results (if available) -->
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-bar"></i> Results</h5>
+            </div>
+            <div class="card-body">
+                {% if analysis %}
+                    <input type="hidden" id="analysisId" value="{{ analysis.id }}">
+                    <div class="alert alert-success">
+                        <h6>Analysis: {{ analysis.name }}</h6>
+                        <p>Statistical analysis completed successfully</p>
+                    </div>
+                    
+                    {% set parameters = analysis.parameters|tojson|fromjson %}
+                    {% set results = analysis.results|tojson|fromjson %}
+                    
+                    <div class="mb-3">
+                        <div class="card bg-dark-subtle">
+                            <div class="card-body">
+                                <h6 class="card-title">Analysis Information</h6>
+                                <p class="mb-1"><strong>Statistical Test:</strong> {{ results.stat_type|title }}</p>
+                                <p class="mb-1"><strong>Significance Level (α):</strong> {{ results.alpha }}</p>
+                                <p class="mb-0"><strong>Number of Subjects:</strong> {{ results.n_subjects }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Show appropriate results based on test type -->
+                    {% if results.stat_type == 'ttest' or results.stat_type == 'anova' %}
+                        <!-- Time-based results for t-test and ANOVA -->
+                        <h6>Results by Time Point</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Mean</th>
+                                        <th>SD</th>
+                                        <th>CV%</th>
+                                        {% if results.stat_type == 'ttest' %}
+                                            <th>t-statistic</th>
+                                        {% else %}
+                                            <th>F-statistic</th>
+                                        {% endif %}
+                                        <th>p-value</th>
+                                        <th>Significant</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for time, time_result in results.time_results|dictsort %}
+                                        <tr class="{{ 'highlight-row' if time_result.significant else '' }}">
+                                            <td>{{ time }}</td>
+                                            <td>{{ "%.4g"|format(time_result.mean) }}</td>
+                                            <td>{{ "%.4g"|format(time_result.std) }}</td>
+                                            <td>{{ "%.2f"|format(time_result.cv_percent) if time_result.cv_percent else 'N/A' }}</td>
+                                            {% if results.stat_type == 'ttest' %}
+                                                <td>{{ "%.4g"|format(time_result.t_stat) }}</td>
+                                            {% else %}
+                                                <td>{{ "%.4g"|format(time_result.f_stat) }}</td>
+                                            {% endif %}
+                                            <td>{{ "%.4g"|format(time_result.p_value) }}</td>
+                                            <td>
+                                                {% if time_result.significant %}
+                                                    <span class="text-success"><i class="fas fa-check-circle"></i> Yes</span>
+                                                {% else %}
+                                                    <span class="text-muted">No</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Visualization -->
+                        <div class="card bg-dark mt-4">
+                            <div class="card-body">
+                                <h6 class="card-title">{{ results.stat_type|title }} Results Visualization</h6>
+                                <div id="timeResultsPlot" class="plot-container"></div>
+                            </div>
+                        </div>
+                        
+                    {% elif results.stat_type == 'regression' %}
+                        <!-- Regression results -->
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Summary Statistics</h6>
+                                {% if results.summary %}
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <tbody>
+                                                {% for key, value in results.summary.items() %}
+                                                    <tr>
+                                                        <th>{{ key|replace('_', ' ')|title }}</th>
+                                                        <td>{{ "%.4g"|format(value) }}</td>
+                                                    </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                {% else %}
+                                    <div class="alert alert-info">No summary statistics available.</div>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <!-- Subject selector for regression results -->
+                                <h6>Individual Regression Results</h6>
+                                <div class="mb-3">
+                                    <label for="subjectSelector" class="form-label">Select Subject</label>
+                                    <select class="form-select" id="subjectSelector">
+                                        {% for subject_id, reg_result in results.regression_results.items() %}
+                                            {% if 'error' not in reg_result %}
+                                                <option value="{{ subject_id }}">Subject {{ subject_id }}</option>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Individual subject regression results -->
+                        {% for subject_id, reg_result in results.regression_results.items() %}
+                            {% if 'error' not in reg_result %}
+                                <div class="subject-regression" id="regression-{{ subject_id }}" style="{% if not loop.first %}display: none;{% endif %}">
+                                    <div class="card mb-3 bg-dark-subtle">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">Subject {{ subject_id }} Regression Results</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <p><strong>Slope:</strong> {{ "%.4g"|format(reg_result.slope) }}</p>
+                                                    <p><strong>Intercept:</strong> {{ "%.4g"|format(reg_result.intercept) }}</p>
+                                                    <p><strong>R²:</strong> {{ "%.4g"|format(reg_result.r_squared) }}</p>
+                                                    <p><strong>Adjusted R²:</strong> {{ "%.4g"|format(reg_result.adj_r_squared) }}</p>
+                                                    <p><strong>p-value:</strong> {{ "%.4g"|format(reg_result.p_value) }}</p>
+                                                    <p><strong>Standard Error:</strong> {{ "%.4g"|format(reg_result.std_err) }}</p>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <p><strong>Elimination Rate (λz):</strong> {{ "%.4g"|format(reg_result.elimination_rate) }} h⁻¹</p>
+                                                    <p><strong>Half-life (t½):</strong> {{ "%.4g"|format(reg_result.half_life) if reg_result.half_life else 'N/A' }} h</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        <!-- Regression plots -->
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="card bg-dark">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Regression Analysis</h6>
+                                        <div id="regressionPlot" class="plot-container"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {% if results.regression_results|length > 1 %}
+                            <div class="row mt-4">
+                                <div class="col-md-12">
+                                    <div class="card bg-dark">
+                                        <div class="card-body">
+                                            <h6 class="card-title">Half-Life Comparison</h6>
+                                            <div id="halfLifePlot" class="plot-container"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endif %}
+                    {% endif %}
+                    
+                    <div class="mt-4">
+                        <a href="{{ url_for('reports') }}?analysis_id={{ analysis.id }}" class="btn btn-secondary">
+                            <i class="fas fa-file-pdf me-2"></i> Generate Report
+                        </a>
+                    </div>
+                    
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-calculator fa-4x mb-3 text-muted"></i>
+                        <h5>No Analysis Results</h5>
+                        <p class="text-muted">Configure and run an analysis to see results here.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dataset Preview Modal -->
+<div class="modal fade" id="datasetPreviewModal" tabindex="-1" aria-labelledby="datasetPreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="datasetPreviewModalLabel">Dataset Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="datasetPreviewContent" class="table-responsive"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Set up test type information
+        const statTypeSelect = document.getElementById('stat_type');
+        const statTypeInfo = document.getElementById('statTypeInfo');
+        
+        if (statTypeSelect && statTypeInfo) {
+            statTypeSelect.addEventListener('change', function() {
+                updateStatTypeInfo(this.value);
+                toggleTestOptions(this.value);
+            });
+        }
+        
+        // Terminal phase selection
+        const terminalPhaseSelect = document.getElementById('terminal_phase');
+        const manualPhaseOptions = document.getElementById('manualPhaseOptions');
+        
+        if (terminalPhaseSelect && manualPhaseOptions) {
+            terminalPhaseSelect.addEventListener('change', function() {
+                manualPhaseOptions.style.display = this.value === 'manual' ? 'block' : 'none';
+            });
+        }
+        
+        // For stats visualization
+        if (document.getElementById('analysisId')) {
+            const analysisId = document.getElementById('analysisId').value;
+            
+            // Fetch analysis data for plotting
+            fetch(`/api/analysis/${analysisId}/plot-data`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        renderStatisticsPlots(data.data);
+                        
+                        // Set up subject selector for regression results
+                        const subjectSelector = document.getElementById('subjectSelector');
+                        if (subjectSelector && data.data.stat_type === 'regression') {
+                            subjectSelector.addEventListener('change', function() {
+                                // Hide all subject regression divs
+                                document.querySelectorAll('.subject-regression').forEach(div => {
+                                    div.style.display = 'none';
+                                });
+                                
+                                // Show the selected subject's regression
+                                const selectedRegression = document.getElementById(`regression-${this.value}`);
+                                if (selectedRegression) {
+                                    selectedRegression.style.display = 'block';
+                                }
+                                
+                                // Update regression plot
+                                const subjectData = data.data.regression_results[this.value];
+                                renderSubjectRegressionPlot('regressionPlot', subjectData);
+                            });
+                            
+                            // Initial plot
+                            const firstSubject = subjectSelector.value;
+                            if (firstSubject && data.data.regression_results[firstSubject]) {
+                                renderSubjectRegressionPlot('regressionPlot', data.data.regression_results[firstSubject]);
+                            }
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading statistical analysis data:', error);
+                });
+        }
+        
+        // Preview dataset when selected
+        const datasetSelect = document.getElementById('dataset_id');
+        if (datasetSelect) {
+            datasetSelect.addEventListener('change', function() {
+                const datasetId = this.value;
+                if (datasetId) {
+                    showDatasetPreviewButton(this, datasetId);
+                }
+            });
+        }
+    });
+    
+    function updateStatTypeInfo(statType) {
+        const infoDiv = document.getElementById('statTypeInfo');
+        if (!infoDiv) return;
+        
+        let infoText = '';
+        
+        switch(statType) {
+            case 'ttest':
+                infoText = `
+                    <p>One-sample t-test compares the mean of each time point against a reference value (default: 0).</p>
+                    <p>This test helps determine if concentrations are significantly different from a baseline or threshold value.</p>
+                    <p>A significant result (p < α) indicates the mean concentration differs from the reference value.</p>
+                `;
+                break;
+            case 'anova':
+                infoText = `
+                    <p>One-way ANOVA compares mean concentrations across subjects at each time point.</p>
+                    <p>This test helps identify if there are significant differences in concentrations between subjects.</p>
+                    <p>A significant result (p < α) indicates variation between subjects is greater than expected by chance.</p>
+                `;
+                break;
+            case 'regression':
+                infoText = `
+                    <p>Linear regression fits a straight line to log-transformed concentration data in the elimination phase.</p>
+                    <p>This analysis calculates the elimination rate constant (λz) and half-life (t½).</p>
+                    <p>The R² value indicates how well the model fits the data (higher values indicate better fit).</p>
+                `;
+                break;
+            default:
+                infoText = 'Select a statistical test to see description.';
+        }
+        
+        infoDiv.innerHTML = infoText;
+    }
+    
+    function toggleTestOptions(statType) {
+        // Hide all option divs
+        document.querySelectorAll('#testOptions > div').forEach(div => {
+            div.style.display = 'none';
+        });
+        
+        // Show the appropriate options div
+        if (statType === 'ttest') {
+            document.getElementById('ttestOptions').style.display = 'block';
+        } else if (statType === 'anova') {
+            document.getElementById('anovaOptions').style.display = 'block';
+        } else if (statType === 'regression') {
+            document.getElementById('regressionOptions').style.display = 'block';
+        }
+    }
+    
+    function showDatasetPreviewButton(selectElement, datasetId) {
+        fetch(`/api/dataset/${datasetId}/preview`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show preview button and register click event
+                    const selectDiv = selectElement.closest('div');
+                    
+                    // Remove existing preview button if any
+                    const existingBtn = selectDiv.querySelector('.preview-btn');
+                    if (existingBtn) {
+                        existingBtn.remove();
+                    }
+                    
+                    // Add new preview button
+                    const previewBtn = document.createElement('button');
+                    previewBtn.className = 'btn btn-sm btn-info mt-2 preview-btn';
+                    previewBtn.innerHTML = '<i class="fas fa-table me-1"></i> Preview Data';
+                    previewBtn.type = 'button';
+                    previewBtn.setAttribute('data-dataset-id', datasetId);
+                    
+                    previewBtn.addEventListener('click', function() {
+                        const id = this.getAttribute('data-dataset-id');
+                        showDatasetPreview(id);
+                    });
+                    
+                    selectDiv.appendChild(previewBtn);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading dataset preview:', error);
+            });
+    }
+    
+    function showDatasetPreview(datasetId) {
+        fetch(`/api/dataset/${datasetId}/preview`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Create preview table
+                    let tableHTML = '<table class="table table-sm table-striped">';
+                    tableHTML += '<thead><tr><th>Subject ID</th><th>Time</th><th>Concentration</th></tr></thead>';
+                    tableHTML += '<tbody>';
+                    
+                    data.data.forEach(sample => {
+                        tableHTML += `<tr><td>${sample.subject_id}</td><td>${sample.time}</td><td>${sample.concentration}</td></tr>`;
+                    });
+                    
+                    tableHTML += '</tbody></table>';
+                    
+                    document.getElementById('datasetPreviewContent').innerHTML = tableHTML;
+                    
+                    // Show modal
+                    const previewModal = new bootstrap.Modal(document.getElementById('datasetPreviewModal'));
+                    previewModal.show();
+                }
+            })
+            .catch(error => {
+                console.error('Error showing dataset preview:', error);
+            });
+    }
+</script>
+{% endblock %}
